@@ -177,12 +177,11 @@ a captured challenge cannot be replayed against a later price.
 | Variable | Required | Description |
 |---|---|---|
 | `OPERATOR_SIGNING_KEY` | No | secp256k1 key that attests this robot's payment requirements. Unset disables signing and logs a warning at startup |
-| `STAKING_PRIVATE_KEY` | **Yes** | secp256k1 key for `staking_address`. Signs the proxy's single-use handshake nonce, proving the robot controls that wallet. Its derived address must equal `staking_address` or startup fails. Environment only — deliberately not settable over the unauthenticated robot config topic |
+| `STAKING_PRIVATE_KEY` | **Yes** | secp256k1 key for `staking_address`. Signs the proxy's single-use handshake nonce, proving the robot controls that wallet. Its derived address must equal `staking_address` or startup fails. Environment only |
 
-The key is read from the environment only. It is deliberately **not** settable
-over the `robot/config/<robot_id>` topic, which is unauthenticated. If it differs
-from `evm_payee_address` the tunnel logs a warning at startup, since payers must
-be told which address to expect.
+The key is read from the environment only. If it differs from
+`evm_payee_address` the tunnel logs a warning at startup, since payers must be
+told which address to expect.
 
 ### MPP (Machine Payments Protocol)
 
@@ -246,8 +245,8 @@ export MPP_SECRET_KEY="$(openssl rand -base64 32)"
 | `mpp_realm`         | No       | `robot_id`           | Authentication realm advertised in the challenge                   |
 
 MPP reuses `price`, so a robot charges the same amount over either protocol.
-Like the x402 fields, all of these can be hot-reloaded over the
-`robot/config/<robot_id>` Zenoh topic.
+Like the x402 fields, these are read once at startup; changing one means editing
+`config.json` (or the environment) and restarting the tunnel.
 
 | Variable            | Required | Description                                                                    |
 |---------------------|----------|--------------------------------------------------------------------------------|

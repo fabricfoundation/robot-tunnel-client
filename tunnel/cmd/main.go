@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"os"
 	"os/signal"
@@ -10,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/eclipse-zenoh/zenoh-go/zenoh"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -29,10 +27,6 @@ import (
 	"github.com/fabricfoundation/tunnel/internal/attest"
 	"github.com/fabricfoundation/tunnel/internal/handlers"
 	"github.com/fabricfoundation/tunnel/internal/mppay"
-)
-
-const (
-	RobotConfigTopicPrefix = "robot/config/"
 )
 
 func main() {
@@ -73,137 +67,6 @@ func main() {
 		logger.Fatal("MPP configuration error", zap.Error(err))
 	}
 
-	session, err := zenoh.Open(zenoh.NewConfigDefault(), nil)
-	if err != nil {
-		logger.Fatal("failed to open zenoh session", zap.Error(err))
-	}
-	defer func() {
-		if err := session.Close(nil); err != nil {
-			logger.Warn("failed to close zenoh session", zap.Error(err))
-		}
-	}()
-
-	restartCh := make(chan struct{}, 1)
-	subTopic := RobotConfigTopicPrefix + cfg.RobotID
-	ke, err := zenoh.NewKeyExpr(subTopic)
-	if err != nil {
-		logger.Fatal("failed to create key expression", zap.Error(err))
-	}
-	sub, err := session.DeclareSubscriber(ke, zenoh.Closure[zenoh.Sample]{
-		Call: func(sample zenoh.Sample) {
-			var partialCfg struct {
-				EVMPayeeAddress      *string `json:"evm_payee_address"`
-				StakingAddress       *string `json:"staking_address"`
-				Price                *string `json:"price"`
-				Network              *string `json:"network"`
-				TokenAddress         *string `json:"token_address"`
-				TokenName            *string `json:"token_name"`
-				TokenVersion         *string `json:"token_version"`
-				TokenDecimals        *int    `json:"token_decimals"`
-				TokenTransferMethod  *string `json:"token_transfer_method"`
-				TokenSupportsEIP2612 *bool   `json:"token_supports_eip2612"`
-				MPPEnabled           *bool   `json:"mpp_enabled"`
-				MPPNetwork           *string `json:"mpp_network"`
-				MPPPayeeAddress      *string `json:"mpp_payee_address"`
-				MPPCurrency          *string `json:"mpp_currency"`
-				MPPDecimals          *int    `json:"mpp_decimals"`
-				MPPRealm             *string `json:"mpp_realm"`
-			}
-			if err := json.Unmarshal(sample.Payload().Bytes(), &partialCfg); err != nil {
-				logger.Warn("failed to parse config update", zap.Error(err))
-				return
-			}
-
-			candidate := *cfg
-			updated := false
-			if partialCfg.EVMPayeeAddress != nil && *partialCfg.EVMPayeeAddress != candidate.EVMPayeeAddress {
-				candidate.EVMPayeeAddress = *partialCfg.EVMPayeeAddress
-				updated = true
-			}
-			if partialCfg.StakingAddress != nil && *partialCfg.StakingAddress != candidate.StakingAddress {
-				candidate.StakingAddress = *partialCfg.StakingAddress
-				updated = true
-			}
-			if partialCfg.Price != nil && *partialCfg.Price != candidate.Price {
-				candidate.Price = *partialCfg.Price
-				updated = true
-			}
-			if partialCfg.Network != nil && *partialCfg.Network != candidate.Network {
-				candidate.Network = *partialCfg.Network
-				updated = true
-			}
-			if partialCfg.TokenAddress != nil && *partialCfg.TokenAddress != candidate.TokenAddress {
-				candidate.TokenAddress = *partialCfg.TokenAddress
-				updated = true
-			}
-			if partialCfg.TokenName != nil && *partialCfg.TokenName != candidate.TokenName {
-				candidate.TokenName = *partialCfg.TokenName
-				updated = true
-			}
-			if partialCfg.TokenVersion != nil && *partialCfg.TokenVersion != candidate.TokenVersion {
-				candidate.TokenVersion = *partialCfg.TokenVersion
-				updated = true
-			}
-			if partialCfg.TokenDecimals != nil && *partialCfg.TokenDecimals != candidate.TokenDecimals {
-				candidate.TokenDecimals = *partialCfg.TokenDecimals
-				updated = true
-			}
-			if partialCfg.TokenTransferMethod != nil && *partialCfg.TokenTransferMethod != candidate.TokenTransferMethod {
-				candidate.TokenTransferMethod = *partialCfg.TokenTransferMethod
-				updated = true
-			}
-			if partialCfg.TokenSupportsEIP2612 != nil && *partialCfg.TokenSupportsEIP2612 != candidate.TokenSupportsEIP2612 {
-				candidate.TokenSupportsEIP2612 = *partialCfg.TokenSupportsEIP2612
-				updated = true
-			}
-			if partialCfg.MPPEnabled != nil && *partialCfg.MPPEnabled != candidate.MPPEnabled {
-				candidate.MPPEnabled = *partialCfg.MPPEnabled
-				updated = true
-			}
-			if partialCfg.MPPNetwork != nil && *partialCfg.MPPNetwork != candidate.MPPNetwork {
-				candidate.MPPNetwork = *partialCfg.MPPNetwork
-				updated = true
-			}
-			if partialCfg.MPPPayeeAddress != nil && *partialCfg.MPPPayeeAddress != candidate.MPPPayeeAddress {
-				candidate.MPPPayeeAddress = *partialCfg.MPPPayeeAddress
-				updated = true
-			}
-			if partialCfg.MPPCurrency != nil && *partialCfg.MPPCurrency != candidate.MPPCurrency {
-				candidate.MPPCurrency = *partialCfg.MPPCurrency
-				updated = true
-			}
-			if partialCfg.MPPDecimals != nil && *partialCfg.MPPDecimals != candidate.MPPDecimals {
-				candidate.MPPDecimals = *partialCfg.MPPDecimals
-				updated = true
-			}
-			if partialCfg.MPPRealm != nil && *partialCfg.MPPRealm != candidate.MPPRealm {
-				candidate.MPPRealm = *partialCfg.MPPRealm
-				updated = true
-			}
-
-			if updated {
-				if err := candidate.Validate(); err != nil {
-					logger.Warn("rejecting invalid config update", zap.Error(err))
-					return
-				}
-				*cfg = candidate
-				logger.Info("config updated via zenoh, signaling restart")
-				select {
-				case restartCh <- struct{}{}:
-				default:
-				}
-			}
-		},
-	}, nil)
-	if err != nil {
-		logger.Fatal("failed to declare config subscriber", zap.Error(err))
-	}
-	defer func() {
-		if err := sub.Undeclare(); err != nil {
-			logger.Warn("failed to undeclare zenoh subscriber", zap.Error(err))
-		}
-	}()
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -227,15 +90,6 @@ func main() {
 
 		clientCtx, clientCancel := context.WithCancel(ctx)
 
-		go func() {
-			select {
-			case <-restartCh:
-				logger.Info("restarting internal client to apply new config...")
-				clientCancel()
-			case <-clientCtx.Done():
-			}
-		}()
-
 		client.Run(clientCtx)
 		clientCancel()
 
@@ -247,7 +101,7 @@ func main() {
 }
 
 // pristineNetworkConfigs is x402's built-in asset table, captured before anything overrides it,
-// so a config update that drops token_address can put the shipped default back.
+// so the shipped default can be put back if nothing overrides it.
 var pristineNetworkConfigs = func() map[string]evm.NetworkConfig {
 	snapshot := make(map[string]evm.NetworkConfig, len(evm.NetworkConfigs))
 	for network, cfg := range evm.NetworkConfigs {
@@ -256,8 +110,8 @@ var pristineNetworkConfigs = func() map[string]evm.NetworkConfig {
 	return snapshot
 }()
 
-// registeredNetwork is the network registerTokenAsset last overrode, so a config update that
-// switches networks does not strand the previous one on a stale asset.
+// registeredNetwork is the network registerTokenAsset last overrode, so switching networks does
+// not strand the previous one on a stale asset.
 var registeredNetwork string
 
 // restoreNetworkDefault undoes an override, falling back to whatever x402 shipped for the network.
