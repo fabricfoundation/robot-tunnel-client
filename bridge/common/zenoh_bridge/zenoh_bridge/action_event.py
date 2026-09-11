@@ -1,13 +1,14 @@
 """Parse Fabric tunnel Action Event payloads."""
+
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 @dataclass
 class ActionEvent:
     action: str
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
     timestamp: str = ""
 
 
@@ -27,6 +28,9 @@ def parse_action_event(raw: bytes) -> Optional[ActionEvent]:
     try:
         event = json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+    if not isinstance(event, dict):
         return None
 
     payload = event.get("payload") or {}

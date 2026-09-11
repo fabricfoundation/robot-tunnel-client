@@ -1,0 +1,31 @@
+[tool.ruff]
+# RoboPay Python quality baseline.
+#
+# Scope: this covers the pure-logic modules that can be linted and tested
+# without a ROS 2 runtime. ROS 2 packages (isaac_sim_bridge, launch files,
+# setup.py) and the command_mapper (which imports geometry_msgs) are
+# deliberately excluded so the baseline is green today and grows as bridges
+# land. Extend `include` as new pure modules are added.
+line-length = 100
+target-version = "py39"
+src = ["bridge", "scripts"]
+
+include = [
+    "bridge/common/zenoh_bridge/zenoh_bridge/action_event.py",
+    "bridge/common/zenoh_bridge/zenoh_bridge/utils.py",
+    "bridge/common/zenoh_bridge/zenoh_bridge/zenoh_subscriber.py",
+    "bridge/common/zenoh_bridge/tests/*.py",
+    "scripts/*.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"bridge/common/zenoh_bridge/tests/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["bridge/common/zenoh_bridge/tests"]
+# Import the pure modules directly so tests do not pull in ROS 2 runtime deps
+# through the package __init__ (which imports command_mapper/geometry_msgs).
+pythonpath = ["bridge/common/zenoh_bridge/zenoh_bridge"]
